@@ -94,23 +94,38 @@ def get_last_message(thread_id):
         params={"threadId": thread_id}
     )
     resp.raise_for_status()
-    data = parse_response(resp)
 
-    # API возвращает либо {"messages": [...]} либо {"result": {...}}
-    if "result" in data:
-        msg = data["result"]
-        parts = msg.get("content", {}).get("content", [])
-        for part in parts:
-            if part.get("text"):
-                return part["text"].get("content", "Нет ответа")
+    # API возвращает NDJSON — несколько JSON-объектов построчно
+    # Парсим ВСЕ строки и ищем сообщение ассистента
+    all_messages = []
+    for line in resp.text.strip().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            obj = json.loads(line)
+            # Каждая строка может быть отдельным сообщением или обёрткой
+            if "result" in obj:
+                all_messages.append(obj["result"])
+            elif "messages" in obj:
+                all_messages.extend(obj["messages"])
+            elif obj.get("author", {}).get("role") or obj.get("role"):
+                all_messages.append(obj)
+        except Exception:
+            continue
 
-    messages = data.get("messages", [])
-    for msg in reversed(messages):
-        if msg.get("author", {}).get("role") == "ASSISTANT" or msg.get("role") == "ASSISTANT":
+    print(f"[messages] всего найдено: {len(all_messages)}")
+
+    # Ищем последнее сообщение ассистента
+    for msg in reversed(all_messages):
+        role = msg.get("author", {}).get("role") or msg.get("role", "")
+        if role == "ASSISTANT":
             parts = msg.get("content", {}).get("content", [])
             for part in parts:
                 if part.get("text"):
-                    return part["text"].get("content", "Нет ответа")
+                    text = part["text"].get("content", "")
+                    if text:
+                        return text
 
     return "Агент не дал ответа"
 
@@ -149,4 +164,4 @@ def reset():
 
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)), debug=False)
+    app.run(debug=True, port=5000)
