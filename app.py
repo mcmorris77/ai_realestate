@@ -94,6 +94,7 @@ def get_last_message(thread_id):
         params={"threadId": thread_id}
     )
     resp.raise_for_status()
+    print(f"[get_messages RAW] {resp.text[:1000]}")
 
     # API возвращает NDJSON — несколько JSON-объектов построчно
     # Парсим ВСЕ строки и ищем сообщение ассистента
