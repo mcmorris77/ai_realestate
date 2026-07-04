@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>РиэлтПро — AI Ассистент</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%23c9a96e'/><text y='48' x='8' font-size='44'>🏠</text></svg>">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Playfair+Display:wght@600&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', sans-serif;
+    background: #0f1117;
+    color: #e8e8e8;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* ── шапка ── */
+  header {
+    width: 100%;
+    background: #16181f;
+    border-bottom: 1px solid #2a2d38;
+    padding: 14px 32px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex-shrink: 0;
+  }
+  .logo-icon {
+    width: 36px; height: 36px;
+    background: linear-gradient(135deg, #c9a96e, #e8c88a);
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 17px;
+  }
+  .logo-text { font-family: 'Playfair Display', serif; font-size: 19px; color: #e8c88a; }
+  .logo-sub  { font-size: 10px; color: #555; letter-spacing: .5px; margin-top: 1px; }
+  .status-dot {
+    margin-left: auto;
+    display: flex; align-items: center; gap: 7px;
+    font-size: 12px; color: #5fba7d;
+  }
+  .dot { width: 7px; height: 7px; background: #5fba7d; border-radius: 50%; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+  /* ── основной layout ── */
+  .main-layout {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+    width: 100%;
+    gap: 0;
+    min-height: 0;
+  }
+
+  /* ── боковая панель с вопросами ── */
+  .sidebar {
+    width: 260px;
+    flex-shrink: 0;
+    background: #13151c;
+    border-right: 1px solid #1e2029;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .sidebar-header {
+    padding: 16px 16px 10px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    color: #444;
+    text-transform: uppercase;
+    border-bottom: 1px solid #1e2029;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .shuffle-btn {
+    background: none; border: none; cursor: pointer;
+    color: #555; font-size: 13px; padding: 2px 4px;
+    border-radius: 4px; transition: color .2s;
+  }
+  .shuffle-btn:hover { color: #c9a96e; }
+
+  .hints-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 0;
+    scrollbar-width: thin;
+    scrollbar-color: #2a2d38 transparent;
+  }
+  .hints-list::-webkit-scrollbar { width: 4px; }
+  .hints-list::-webkit-scrollbar-track { background: transparent; }
+  .hints-list::-webkit-scrollbar-thumb { background: #2a2d38; border-radius: 2px; }
+
+  .hint {
+    display: block;
+    width: 100%;
+    padding: 9px 16px;
+    background: none;
+    border: none;
+    text-align: left;
+    font-size: 12.5px;
+    color: #888;
+    cursor: pointer;
+    transition: all .15s;
+    line-height: 1.4;
+    border-left: 2px solid transparent;
+  }
+  .hint:hover {
+    background: #1a1c25;
+    color: #e8c88a;
+    border-left-color: #c9a96e;
+  }
+  .hint .hint-emoji { margin-right: 6px; }
+
+  /* ── чат секция ── */
+  .chat-section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  #chat {
+    flex: 1;
+    padding: 24px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    overflow-y: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #2a2d38 transparent;
+  }
+  #chat::-webkit-scrollbar { width: 5px; }
+  #chat::-webkit-scrollbar-thumb { background: #2a2d38; border-radius: 3px; }
+
+  .bubble {
+    max-width: 80%;
+    padding: 14px 18px;
+    border-radius: 16px;
+    font-size: 14.5px; line-height: 1.65;
+    animation: fadeUp .25s ease;
+  }
+  @keyframes fadeUp { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
+
+  .bubble.user {
+    align-self: flex-end;
+    background: linear-gradient(135deg, #b8902a, #c9a96e);
+    color: #fff; border-bottom-right-radius: 4px;
+  }
+  .bubble.bot {
+    align-self: flex-start;
+    background: #1e2029; border: 1px solid #2a2d38;
+    color: #ddd; border-bottom-left-radius: 4px;
+  }
+  .bubble.bot .sender {
+    font-size: 11px; color: #c9a96e; font-weight: 600;
+    letter-spacing: .4px; margin-bottom: 7px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .bubble.bot .sender::before { content:"🏠"; }
+
+  .typing { display: flex; gap: 5px; padding: 6px 0; }
+  .typing span {
+    width: 7px; height: 7px; background: #c9a96e;
+    border-radius: 50%; animation: bounce .9s infinite;
+  }
+  .typing span:nth-child(2){ animation-delay:.15s }
+  .typing span:nth-child(3){ animation-delay:.3s }
+  @keyframes bounce { 0%,60%,100%{transform:none} 30%{transform:translateY(-6px)} }
+
+  /* ── ввод ── */
+  .input-bar {
+    padding: 14px 28px 20px;
+    display: flex; gap: 10px; align-items: flex-end;
+    border-top: 1px solid #1e2029;
+    background: #0f1117;
+  }
+  #msg {
+    flex: 1; background: #1e2029; border: 1px solid #2e3140;
+    border-radius: 14px; padding: 13px 16px;
+    font-size: 14px; color: #e8e8e8; font-family: inherit;
+    resize: none; outline: none; max-height: 160px; overflow-y: auto;
+    transition: border-color .2s;
+  }
+  #msg:focus { border-color: #c9a96e; }
+  #msg::placeholder { color: #444; }
+
+  #send {
+    background: linear-gradient(135deg, #b8902a, #c9a96e);
+    border: none; border-radius: 12px;
+    width: 46px; height: 46px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; transition: opacity .2s; flex-shrink: 0;
+  }
+  #send:hover { opacity: .85; }
+  #send:disabled { opacity: .4; cursor: default; }
+
+  #reset-btn {
+    background: none; border: 1px solid #2e3140;
+    border-radius: 12px; width: 46px; height: 46px;
+    cursor: pointer; color: #555; font-size: 16px;
+    transition: all .2s; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #reset-btn:hover { border-color: #c9a96e; color: #c9a96e; }
+
+  .welcome {
+    align-self: center; text-align: center;
+    padding: 40px 20px; max-width: 420px;
+    margin: auto;
+  }
+  .welcome .big { font-family: 'Playfair Display', serif; font-size: 24px; color: #e8c88a; margin-bottom: 10px; }
+  .welcome .sub { font-size: 13px; color: #555; line-height: 1.6; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-icon">🏠</div>
+  <div>
+    <div class="logo-text">РиэлтПро</div>
+    <div class="logo-sub">AI АССИСТЕНТ ПО НЕДВИЖИМОСТИ</div>
+  </div>
+  <div class="status-dot"><div class="dot"></div>Онлайн</div>
+</header>
+
+<div class="main-layout">
+
+  <!-- боковая панель -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      Частые вопросы
+      <button class="shuffle-btn" onclick="shuffleHints()" title="Перемешать">⟳</button>
+    </div>
+    <div class="hints-list" id="hintsList"></div>
+  </aside>
+
+  <!-- чат -->
+  <div class="chat-section">
+    <div id="chat">
+      <div class="welcome">
+        <div class="big">Здравствуйте 👋</div>
+        <div class="sub">Задайте любой вопрос по недвижимости, ипотеке, аренде или ЖКХ — отвечу подробно.</div>
+      </div>
+    </div>
+
+    <div class="input-bar">
+      <button id="reset-btn" title="Новый диалог" onclick="resetChat()">🔄</button>
+      <textarea id="msg" rows="1" placeholder="Ваш вопрос по недвижимости..."></textarea>
+      <button id="send" onclick="sendMessage()">➤</button>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const ALL_HINTS = [
+  ['💬', 'Как проходит сделка купли-продажи?'],
+  ['🏦', 'Условия семейной ипотеки в 2026 году'],
+  ['📋', 'Какие документы нужны продавцу квартиры?'],
+  ['🔍', 'Как проверить юридическую чистоту квартиры?'],
+  ['🏗️', 'Как проверить надёжность застройщика?'],
+  ['📄', 'Что такое ДДУ и эскроу-счёт?'],
+  ['💰', 'Что такое задаток и чем отличается от аванса?'],
+  ['🧾', 'Какой налог при продаже квартиры?'],
+  ['💳', 'Как получить налоговый вычет при покупке?'],
+  ['📊', 'Как работает IT-ипотека в 2026 году?'],
+  ['👶', 'Как использовать материнский капитал на квартиру?'],
+  ['🪖', 'Условия военной ипотеки'],
+  ['🌲', 'Что такое дальневосточная ипотека?'],
+  ['🏘️', 'Как улучшить кредитную историю для ипотеки?'],
+  ['📉', 'Как повысить шансы на одобрение ипотеки?'],
+  ['🔑', 'На что смотреть при осмотре квартиры в аренду?'],
+  ['📝', 'Что обязательно прописать в договоре аренды?'],
+  ['💼', 'Как сдать квартиру официально и платить меньше налогов?'],
+  ['😤', 'Хозяин не возвращает залог — что делать?'],
+  ['🚿', 'Соседи сверху затопили — порядок действий'],
+  ['🌡️', 'В квартире не топят — куда жаловаться?'],
+  ['📟', 'Как правильно передавать показания счётчиков?'],
+  ['🏢', 'Как сменить управляющую компанию?'],
+  ['🛠️', 'Можно ли делать перепланировку без согласования?'],
+  ['🏙️', 'Какие районы Москвы лучше для жизни с детьми?'],
+  ['😨', 'Боюсь брать ипотеку — вдруг не смогу платить'],
+  ['🤔', 'Что лучше — купить в ипотеку или снимать и копить?'],
+  ['⚠️', 'Застройщик просит подписать перенос сдачи — что делать?'],
+  ['🏠', 'Чем отличается новостройка от вторичного жилья?'],
+  ['📐', 'Как принять квартиру в новостройке правильно?'],
+];
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function renderHints() {
+  const list = document.getElementById('hintsList');
+  const shown = shuffle(ALL_HINTS);
+  list.innerHTML = shown.map(([emoji, text]) =>
+    `<button class="hint" onclick="sendHint(this)">
+      <span class="hint-emoji">${emoji}</span>${text}
+    </button>`
+  ).join('');
+}
+
+function shuffleHints() {
+  renderHints();
+}
+
+// инициализация при загрузке
+renderHints();
+
+const chat = document.getElementById('chat');
+const msgEl = document.getElementById('msg');
+const sendBtn = document.getElementById('send');
+
+msgEl.addEventListener('input', () => {
+  msgEl.style.height = 'auto';
+  msgEl.style.height = Math.min(msgEl.scrollHeight, 160) + 'px';
+});
+
+msgEl.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage(); }
+});
+
+function sendHint(el) {
+  const text = el.textContent.trim();
+  msgEl.value = text;
+  sendMessage();
+}
+
+function addBubble(text, role) {
+  const w = chat.querySelector('.welcome');
+  if (w) w.remove();
+
+  const div = document.createElement('div');
+  div.className = `bubble ${role}`;
+
+  if (role === 'bot') {
+    div.innerHTML = `<div class="sender">РиэлтПро Ассистент</div>${formatText(text)}`;
+  } else {
+    div.textContent = text;
+  }
+
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+  return div;
+}
+
+function addTyping() {
+  const div = document.createElement('div');
+  div.className = 'bubble bot';
+  div.id = 'typing';
+  div.innerHTML = '<div class="sender">РиэлтПро Ассистент</div><div class="typing"><span></span><span></span><span></span></div>';
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+}
+
+function removeTyping() {
+  const t = document.getElementById('typing');
+  if (t) t.remove();
+}
+
+function formatText(text) {
+  return text
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/\*\*(.*?)\*\*/g,'<strong>$1</strong>')
+    .replace(/\n/g,'<br>');
+}
+
+async function sendMessage() {
+  const text = msgEl.value.trim();
+  if (!text) return;
+
+  msgEl.value = '';
+  msgEl.style.height = 'auto';
+  sendBtn.disabled = true;
+
+  addBubble(text, 'user');
+  addTyping();
+
+  try {
+    const resp = await fetch('/ask', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ message: text })
+    });
+    const data = await resp.json();
+    removeTyping();
+    if (data.error) {
+      addBubble('Произошла ошибка: ' + data.error, 'bot');
+    } else {
+      addBubble(data.answer, 'bot');
+    }
+  } catch(e) {
+    removeTyping();
+    addBubble('Ошибка соединения с сервером.', 'bot');
+  }
+
+  sendBtn.disabled = false;
+  msgEl.focus();
+}
+
+async function resetChat() {
+  await fetch('/reset', { method: 'POST' });
+  chat.innerHTML = `
+    <div class="welcome">
+      <div class="big">Новый диалог 👋</div>
+      <div class="sub">Задайте любой вопрос по недвижимости или ипотеке.</div>
+    </div>`;
+  renderHints();
+}
+</script>
+</body>
+</html>

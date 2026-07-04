@@ -1,0 +1,20 @@
+# Секреты — никогда не коммитить!
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+
+# Виртуальное окружение
+.venv/
+venv/
+env/
+
+# PyCharm
+.idea/
+
+# Windows
+Thumbs.db
+desktop.ini
