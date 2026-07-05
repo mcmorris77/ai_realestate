@@ -1,5 +1,4 @@
 import os
-import time
 import json
 import requests
 from flask import Flask, render_template, request, jsonify, session
@@ -10,130 +9,36 @@ load_dotenv()
 app = Flask(__name__)
 app.secret_key = "rieltpro-secret-2026"
 
-API_KEY      = os.getenv("YANDEX_API_KEY")
-ASSISTANT_ID = os.getenv("ASSISTANT_ID")
-FOLDER_ID    = os.getenv("FOLDER_ID")
-BASE_URL     = "https://rest-assistant.api.cloud.yandex.net/assistants/v1"
+API_KEY   = os.getenv("YANDEX_API_KEY")
+FOLDER_ID = os.getenv("FOLDER_ID")
+URL = "https://llm.api.cloud.yandex.net/foundationModels/v1/completion"
 
+SYSTEM_PROMPT = """Ты — консультант по недвижимости и ипотеке в России. Помогаешь покупателям, продавцам, арендаторам и арендодателям.
 
-def headers():
-    return {
-        "Authorization": f"Api-Key {API_KEY}",
-        "Content-Type": "application/json",
-        "x-folder-id": FOLDER_ID
-    }
+Отвечай на вопросы про:
+— ипотеку: семейную (6%, до 12 млн в Москве), IT-ипотеку (6%, до 9 млн, только новостройки вне Москвы и СПб), ипотеку для военнослужащих по НИС (взнос 411 185 руб/год), дальневосточную (2%, до 9 млн), арктическую, сельскую (0.1-3%, до 6 млн)
+— ключевая ставка ЦБ июль 2026: 14.25%, рыночная ипотека от 16-19%
+— минимальный срок ипотеки: 1 год, максимальный: 30 лет
+— материнский капитал 2026: 728 921 руб на первого ребёнка, 963 243 руб на второго
+— купля-продажа квартир: документы, этапы сделки, задаток vs аванс, налоги
+— налог при продаже: 13% если владел менее 3 лет (единственное жильё) или 5 лет; вычет 260 тыс руб при покупке
+— новостройки: ДДУ, эскроу-счёт, приёмка квартиры, проверка застройщика через наш.дом.рф
+— аренда: договор, залог, права сторон, налоги самозанятого 4-6%
+— ЖКХ: счётчики, управляющая компания, капремонт, права при затоплении
+— законы: ФЗ-102 (ипотека), ФЗ-214 (ДДУ), ФЗ-218 (ЕГРН), ГК РФ ст.380-381 (задаток)
+— застройщики России: ГК Самолёт (лидер, 4.95 млн м²), ПИК, Dogma, А101, ФСК
+— ЖК Москвы: Остров (Донстрой), ХАЙ ЛАЙФ (PIONEER), Скандинавия (А101, Коммунарка)
 
-
-def parse_response(resp):
-    """Парсим ответ — API иногда возвращает несколько JSON строк (NDJSON)"""
-    text = resp.text.strip()
-    # Берём первую непустую строку
-    for line in text.splitlines():
-        line = line.strip()
-        if line:
-            return json.loads(line)
-    return {}
-
-
-def create_thread():
-    resp = requests.post(f"{BASE_URL}/threads", headers=headers(), json={
-        "folderId": FOLDER_ID
-    })
-    resp.raise_for_status()
-    data = parse_response(resp)
-    thread_id = data["id"]
-    print(f"[OK] Тред создан: {thread_id}")
-    return thread_id
-
-
-def send_message(thread_id, text):
-    resp = requests.post(f"{BASE_URL}/messages", headers=headers(), json={
-        "threadId": thread_id,
-        "role": "USER",
-        "content": {
-            "content": [
-                {"type": "TEXT", "text": {"content": text}}
-            ]
-        }
-    })
-    resp.raise_for_status()
-    print(f"[OK] Сообщение отправлено")
-
-
-def run_assistant(thread_id):
-    resp = requests.post(f"{BASE_URL}/runs", headers=headers(), json={
-        "threadId": thread_id,
-        "assistantId": ASSISTANT_ID
-    })
-    resp.raise_for_status()
-    data = parse_response(resp)
-    run_id = data["id"]
-    print(f"[OK] Run запущен: {run_id}")
-    return run_id
-
-
-def wait_for_result(run_id, max_wait=60):
-    for i in range(max_wait):
-        resp = requests.get(f"{BASE_URL}/runs/{run_id}", headers=headers())
-        resp.raise_for_status()
-        data = parse_response(resp)
-        status = data.get("state", {}).get("status", "UNKNOWN")
-        print(f"[wait] попытка {i+1}: status={status}")
-        if status in ("COMPLETED", "SUCCEEDED"):
-            return
-        elif status in ("FAILED", "CANCELLED", "ERROR"):
-            raise Exception(f"Run завершился с ошибкой: {status}")
-        time.sleep(1)
-    raise Exception("Агент не ответил за 60 секунд")
-
-
-def get_last_message(thread_id):
-    resp = requests.get(
-        f"{BASE_URL}/messages",
-        headers=headers(),
-        params={"threadId": thread_id}
-    )
-    resp.raise_for_status()
-    print(f"[get_messages RAW] {resp.text[:1000]}")
-
-    # API возвращает NDJSON — несколько JSON-объектов построчно
-    # Парсим ВСЕ строки и ищем сообщение ассистента
-    all_messages = []
-    for line in resp.text.strip().splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            obj = json.loads(line)
-            # Каждая строка может быть отдельным сообщением или обёрткой
-            if "result" in obj:
-                all_messages.append(obj["result"])
-            elif "messages" in obj:
-                all_messages.extend(obj["messages"])
-            elif obj.get("author", {}).get("role") or obj.get("role"):
-                all_messages.append(obj)
-        except Exception:
-            continue
-
-    print(f"[messages] всего найдено: {len(all_messages)}")
-
-    # Ищем последнее сообщение ассистента
-    for msg in reversed(all_messages):
-        role = msg.get("author", {}).get("role") or msg.get("role", "")
-        if role == "ASSISTANT":
-            parts = msg.get("content", {}).get("content", [])
-            for part in parts:
-                if part.get("text"):
-                    text = part["text"].get("content", "")
-                    if text:
-                        return text
-
-    return "Агент не дал ответа"
+Правила:
+— Отвечай конкретно с цифрами
+— Будь дружелюбен, общайся на вы
+— Если точных данных нет — направь на banki.ru или наш.дом.рф
+— Отвечай ТОЛЬКО на вопросы про недвижимость"""
 
 
 @app.route("/")
 def index():
-    session.pop("thread_id", None)
+    session.pop("history", None)
     return render_template("index.html")
 
 
@@ -143,16 +48,47 @@ def ask():
     user_message = data.get("message", "").strip()
     if not user_message:
         return jsonify({"error": "Пустой вопрос"}), 400
+
+    # История диалога в сессии
+    history = session.get("history", [])
+    history.append({"role": "user", "text": user_message})
+
+    # Оставляем только последние 10 сообщений чтобы не раздувать контекст
+    if len(history) > 10:
+        history = history[-10:]
+
+    messages = [{"role": "system", "text": SYSTEM_PROMPT}]
+    messages.extend(history)
+
     try:
-        thread_id = session.get("thread_id")
-        if not thread_id:
-            thread_id = create_thread()
-            session["thread_id"] = thread_id
-        send_message(thread_id, user_message)
-        run_id = run_assistant(thread_id)
-        wait_for_result(run_id)
-        answer = get_last_message(thread_id)
+        resp = requests.post(
+            URL,
+            headers={
+                "Authorization": f"Api-Key {API_KEY}",
+                "x-folder-id": FOLDER_ID,
+                "Content-Type": "application/json"
+            },
+            json={
+                "modelUri": f"gpt://{FOLDER_ID}/yandexgpt/latest",
+                "completionOptions": {
+                    "stream": False,
+                    "temperature": 0.4,
+                    "maxTokens": 2000
+                },
+                "messages": messages
+            },
+            timeout=30
+        )
+        resp.raise_for_status()
+        result = resp.json()
+        answer = result["result"]["alternatives"][0]["message"]["text"]
+
+        # Сохраняем ответ в историю
+        history.append({"role": "assistant", "text": answer})
+        session["history"] = history
+
         return jsonify({"answer": answer})
+
     except Exception as e:
         print(f"[ERROR] {e}")
         return jsonify({"error": str(e)}), 500
@@ -160,7 +96,7 @@ def ask():
 
 @app.route("/reset", methods=["POST"])
 def reset():
-    session.pop("thread_id", None)
+    session.pop("history", None)
     return jsonify({"ok": True})
 
 
